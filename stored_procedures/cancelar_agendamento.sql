@@ -1,3 +1,5 @@
+-- Cancela um agendamento (pendente ou confirmado)
+-- Se já foi confirmado, reverte a transação de créditos
 CREATE OR REPLACE FUNCTION cancelar_agendamento(
     p_id_agendamento INTEGER,
     p_nusp_cancelador VARCHAR(20)
@@ -12,28 +14,28 @@ BEGIN
     INTO v_status, v_preco, v_nusp_solicitante, v_nusp_tutor
     FROM agendamento
     WHERE id = p_id_agendamento;
-    
+
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Agendamento não encontrado';
     END IF;
-    
+
     IF v_status NOT IN ('pendente', 'confirmado') THEN
         RAISE EXCEPTION 'Não pode cancelar';
     END IF;
-    
-    -- Se confirmado, reverte transação
+
+    -- Se já estava confirmado, precisa reverter a transação
     IF v_status = 'confirmado' THEN
-        -- Reembolsa aluno
-        UPDATE aluno 
+        -- Devolve créditos pro aluno
+        UPDATE aluno
         SET qtd_creditos = qtd_creditos + v_preco
         WHERE nusp = v_nusp_solicitante;
-        
-        -- Debita tutor (MESMO valor)
-        UPDATE aluno 
+
+        -- Tira créditos do tutor (mesmo valor)
+        UPDATE aluno
         SET qtd_creditos = qtd_creditos - v_preco
         WHERE nusp = v_nusp_tutor;
     END IF;
-    
+
     UPDATE agendamento
     SET status = 'cancelado'
     WHERE id = p_id_agendamento;

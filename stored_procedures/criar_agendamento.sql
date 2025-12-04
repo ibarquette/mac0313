@@ -1,3 +1,5 @@
+-- Cria um novo agendamento de tutoria em status 'pendente'
+-- Valida créditos do aluno e disponibilidade do tutor
 CREATE OR REPLACE FUNCTION criar_agendamento(
     p_nusp_solicitante VARCHAR(20),
     p_nusp_tutor VARCHAR(20),
@@ -15,26 +17,25 @@ DECLARE
     v_duracao_minutos INTEGER;
     v_assunto TEXT;
 BEGIN
-    -- Calcula duração
+    -- Calcula duração em minutos
     v_duracao_minutos := EXTRACT(EPOCH FROM (p_h_fim - p_h_inicio)) / 60;
-    
+
     IF v_duracao_minutos < 30 THEN
         RAISE EXCEPTION 'Duração mínima: 30 minutos';
     END IF;
-    
-    -- 1 crédito = 30 minutos (SEMPRE)
+
+    -- 1 crédito = 30 minutos (sempre arredonda pra cima)
     v_creditos_necessarios := CEIL(v_duracao_minutos / 30.0);
-    
-    -- Verifica créditos do aluno
+
     SELECT qtd_creditos INTO v_creditos_aluno
     FROM aluno WHERE nusp = p_nusp_solicitante;
-    
+
     IF v_creditos_aluno < v_creditos_necessarios THEN
-        RAISE EXCEPTION 'Créditos insuficientes. Necessário: %, Disponível: %', 
+        RAISE EXCEPTION 'Créditos insuficientes. Necessário: %, Disponível: %',
             v_creditos_necessarios, v_creditos_aluno;
     END IF;
-    
-    -- Verifica disponibilidade
+
+    -- Verifica se o tutor tem disponibilidade cadastrada que cubra todo o período
     IF NOT EXISTS (
         SELECT 1 FROM disponibilidade_tutor
         WHERE nusp_tutor = p_nusp_tutor
@@ -44,8 +45,8 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'Tutor não disponível';
     END IF;
-    
-    -- Cria agendamento
+
+    -- Cria agendamento (créditos NÃO são debitados aqui, só na confirmação)
     INSERT INTO agendamento (
         nusp_solicitante, nusp_tutor, data, h_inicio, h_fim,
         modo_atendimento, localizacao, preco, status
@@ -53,13 +54,12 @@ BEGIN
         p_nusp_solicitante, p_nusp_tutor, p_data, p_h_inicio, p_h_fim,
         p_modo_atendimento, p_localizacao, v_creditos_necessarios, 'pendente'
     ) RETURNING id INTO v_id_agendamento;
-    
-    -- Adiciona assuntos
+
     FOREACH v_assunto IN ARRAY p_assuntos LOOP
         INSERT INTO assunto_agendamento (id_agendamento, assunto)
         VALUES (v_id_agendamento, v_assunto);
     END LOOP;
-    
+
     RETURN v_id_agendamento;
 END;
 $$ LANGUAGE plpgsql;

@@ -131,6 +131,7 @@ CREATE TABLE
         localizacao VARCHAR(200),
         CONSTRAINT hora_agenda_valida CHECK (h_inicio < h_fim),
         CONSTRAINT preco_nao_neg CHECK (preco >= 0),
+        CONSTRAINT agendamento_reflexivo CHECK (nusp_solicitante <> nusp_tutor),
         FOREIGN KEY (nusp_solicitante) REFERENCES aluno (nusp) ON UPDATE CASCADE ON DELETE RESTRICT,
         FOREIGN KEY (nusp_tutor) REFERENCES tutor (nusp) ON UPDATE CASCADE ON DELETE RESTRICT
     );
@@ -223,7 +224,8 @@ CREATE TABLE
         CONSTRAINT nota_intervalo CHECK (
             nota >= 0
             AND nota <= 5
-        )
+        ),
+        CONSTRAINT autoavaliacao CHECK (nusp_avaliador <> nusp_avaliado)
     );
 
 -- =========================
@@ -238,5 +240,6 @@ CREATE TABLE
         criada_em TIMESTAMP DEFAULT now (),
         PRIMARY KEY (nusp_denunciador, nusp_alvo, criada_em),
         FOREIGN KEY (nusp_denunciador) REFERENCES aluno (nusp) ON UPDATE CASCADE ON DELETE RESTRICT,
-        FOREIGN KEY (nusp_alvo) REFERENCES aluno (nusp) ON UPDATE CASCADE ON DELETE RESTRICT
+        FOREIGN KEY (nusp_alvo) REFERENCES aluno (nusp) ON UPDATE CASCADE ON DELETE RESTRICT,
+        CONSTRAINT autodenuncia CHECK (nusp_denunciador <> nusp_alvo)
     );

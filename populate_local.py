@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 import getpass
 
-ZIP_FILE_PATH = "dados_populacao_db_v2.zip"
+ZIP_FILE_PATH = "dados_populacao.zip"
 SCHEMA_FILE_PATH = "schema.sql"
 
 TABLE_ORDER = [
@@ -74,7 +74,7 @@ def populate_tables(engine: Engine):
                 csv_filename = f"{table_name}.csv"
                 
                 if csv_filename in z.namelist():
-                    print(f"  -> Processando tabela: {table_name}")
+                    print(f"Processando tabela: {table_name}")
                     
                     with z.open(csv_filename) as csv_file:
                         df = pd.read_csv(csv_file)
@@ -87,11 +87,12 @@ def populate_tables(engine: Engine):
                             method='multi'
                         )
                         
-                        print(f"{len(df)} linhas inseridas em {table_name}.")
+                        print(f"    {len(df)} linhas inseridas em {table_name}.")
+                        print()
                 else:
                     print(f"Arquivo {csv_filename} não encontrado no ZIP. Pulando.")
         
-        print("\nPopulação do banco de dados concluída com sucesso!")
+        print("População do banco de dados concluída com sucesso!")
         return True
         
     except FileNotFoundError:

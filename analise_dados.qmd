@@ -1,0 +1,356 @@
+---
+title: Análise de Dados do Sistema de Monitorias da USP
+author: 
+        - Caio Mendes de Almeida - 15444560
+        - Enzo dos Santos Aguiar - 13687283
+        - Franklin Eduardo Restrepo - 14995938
+        - Ian Barquette Loures - 15459667
+format:
+  pdf:
+    documentclass: article
+    fontsize: 12pt
+    monofont: "Consolas"
+    extra-dependencies:
+      - float
+  html: 
+    theme: cosmo
+editor: source
+execute:
+  echo: false
+  keep-ipynb: true
+  warning: false
+  message: false
+fig-align: center
+fig-cap-location: top
+fig-pos: H
+tbl-pos: H
+engine: knitr
+date: last-modified
+date-format: long
+lang: pt-BR
+geometry:
+    - left=2cm
+    - top=2cm
+    - bottom=2cm
+    - right=2cm
+---
+
+```{r Carregamento dos Dados, echo = FALSE, warning = FALSE, message = FALSE}
+#|echo: false
+pacotes <- c("DBI", "RPostgres", "dplyr", "purrr", "ggplot2", "knitr", "kableExtra")
+
+for (pacote in pacotes) {
+  if (!require(pacote, character.only = TRUE, quietly = TRUE)) {
+    cat(sprintf("Instalando %s...\n", pacote))
+    install.packages(pacote, quiet=TRUE)
+    library(pacote, character.only = TRUE)
+  }
+}
+
+# PREENCHER A CONEXÃO PARA O BANCO DE DADOS!
+con <- dbConnect(
+  RPostgres::Postgres(),
+  host = "",
+  port = ,
+  dbname = "",
+  user = "",
+  password = ""
+)
+# PREENCHER A CONEXÃO PARA O BANCO DE DADOS!
+
+
+# CONSULTAS AO BD
+query_denuncia_status <- "SELECT status, COUNT(*) FROM denuncia GROUP BY status;"
+query_denuncia_dias <- "SELECT NOW()::date - criada_em::date AS days_difference
+FROM denuncia WHERE status = 'em_analise' OR status = 'aberta'"
+
+count_status_denuncia <- dbGetQuery(con, query_denuncia_status)
+count_status_denuncia$count <- as.numeric(count_status_denuncia$count)
+count_status_denuncia$status <- factor(count_status_denuncia$status)
+dias_denuncia <- dbGetQuery(con, query_denuncia_dias)
+
+query_todas_notas <- "SELECT nota FROM avaliacao"
+query_estat_notas <- "SELECT MIN(nota) AS min, MAX(nota) AS max, AVG(nota) AS avg FROM avaliacao"
+notas_avaliacao <- as.data.frame(dbGetQuery(con, query_todas_notas))
+estat_notas <- as.data.frame(dbGetQuery(con, query_estat_notas))
+
+query_top_senders <- "SELECT nusp_remetente, COUNT(*) AS count
+                      FROM mensagem
+                      GROUP BY (nusp_remetente)
+                      ORDER BY count DESC;"
+top_senders <- as.data.frame(dbGetQuery(con, query_top_senders))
+
+query_assunto_aula <- "SELECT assunto, COUNT (*) as count
+                      FROM assunto_aula
+                      GROUP BY (assunto);"
+assunto_aula <- as.data.frame(dbGetQuery(con, query_assunto_aula))
+
+query_duracao_aula <- "SELECT (EXTRACT(EPOCH FROM (h_fim - h_inicio)) / 3600.0) AS duracao, COUNT (*) AS count
+                      FROM aula
+                      GROUP BY duracao
+                      ORDER BY duracao;"
+duracao_aula <- as.data.frame(dbGetQuery(con, query_duracao_aula))
+
+query_agendamento_status <- "SELECT status, COUNT (*) AS count
+                            FROM agendamento
+                            GROUP BY status;"
+
+agendamento_status <- as.data.frame(dbGetQuery(con, query_agendamento_status))
+
+query_modo_atendimento <- "SELECT modo_atendimento, COUNT (*) AS count
+                            FROM agendamento
+                            GROUP BY modo_atendimento;"
+modo_atendimento <- as.data.frame(dbGetQuery(con, query_modo_atendimento))
+
+query_top_agendamentos_solicitante <- "SELECT nusp_solicitante, COUNT (*) AS count
+                                      FROM agendamento
+                                      GROUP BY nusp_solicitante
+                                      ORDER BY count DESC;"
+
+top_agendamentos_solicitante <- as.data.frame(dbGetQuery(con, query_top_agendamentos_solicitante))
+
+query_top_agendamentos_tutor <- "SELECT nusp_tutor, COUNT (*) AS count
+                                      FROM agendamento
+                                      GROUP BY nusp_tutor
+                                      ORDER BY count DESC;"
+top_agendamentos_tutor <- as.data.frame(dbGetQuery(con, query_top_agendamentos_tutor))
+
+query_dinheiro_gasto <- "SELECT nusp_comprador, SUM(preco) as total
+                        FROM aluno_pacote
+                        GROUP BY nusp_comprador
+                        ORDER BY total DESC;"
+dinheiro_gasto <- as.data.frame(dbGetQuery(con, query_dinheiro_gasto))
+
+query_alunos_curso <- "SELECT c.nome AS curso_nome,
+       COUNT(*) AS num_alunos
+FROM aluno al
+LEFT JOIN curso c ON c.codigo = al.curso
+GROUP BY al.curso, c.nome
+ORDER BY num_alunos DESC;"
+alunos_curso <- as.data.frame(dbGetQuery(con, query_alunos_curso))
+
+query_alunos_instituto <- "SELECT i.nome AS instituto,
+       COUNT(*) AS num_alunos
+FROM aluno al
+JOIN curso c ON c.codigo = al.curso
+JOIN instituto i ON i.nome = c.id_instituto
+GROUP BY i.nome
+ORDER BY num_alunos DESC
+LIMIT 5;
+"
+
+alunos_instituto <- as.data.frame(dbGetQuery(con, query_alunos_instituto))
+
+query_nota_tutores <- "SELECT nome_completo, qtd_avaliacoes, avaliacao_media
+                          FROM v_ranking_tutores
+                          ORDER BY qtd_avaliacoes DESC;"
+
+nota_tutores <- as.data.frame(dbGetQuery(con, query_nota_tutores))
+
+query_materias <- "SELECT nome, qtd_tutores_disponiveis, qtd_aulas_concluidas, avaliacao_media_disciplina
+                  FROM v_disciplinas_mais_procuradas"
+
+materias <- as.data.frame(dbGetQuery(con, query_materias))
+
+dbDisconnect(con)
+# CONSULTAS AO BD
+
+```
+
+# Denúncias
+
+O sistema tem modelo de denúncias para usuários, tanto para alunos quanto para tutores. Analisaremos os status das denúncias para checar a eficiência (@fig-denun-stat-barra):
+
+```{r Denuncia1, echo = FALSE, warning = FALSE, message = FALSE}
+#| label: fig-denun-stat-barra
+#| tbl-cap: ""
+barras_denuncia_status <- ggplot(data = count_status_denuncia) + geom_bar(aes(x = status, y = count, fill = status), stat = "identity") + theme_minimal() + labs(title = "Gráfico de Barras: Denúncias por Status", x = "Status", y = "Frequência") + theme(plot.title = element_text(hjust = 0.5)) + scale_fill_manual(values = c("aberta" = "#D73027", "em_analise" = "#FDC300", "fechada" = "#1A9850"), labels = c(aberta = "Aberta", em_analise = "Em Análise", fechada = "Fechada")) + scale_x_discrete(labels = c(aberta = "Aberta", em_analise = "Em Análise", fechada = "Fechada")) + theme(legend.position = "none") + theme(axis.ticks.x = element_blank()) + ylim(c(0,8))
+barras_denuncia_status
+```
+
+Como evidenciado a seguir na @tbl-denun-estat, o sistema se mostra bem ineficiente, visto que múltiplas denúncias abertas ou em análise foram feitas há muitos dias.
+
+```{r Denuncia2, echo = FALSE, warning = FALSE, message = FALSE}
+#| label: tbl-denun-estat
+#| tbl-cap: "Estatísticas das Denúncias em Aberto e em Análise"
+simple_stats <- tibble(
+  '(dias) Média'   = mean(dias_denuncia$days_difference, na.rm = TRUE),
+  Min    = min(dias_denuncia$days_difference, na.rm = TRUE),
+  Mediana = median(dias_denuncia$days_difference, na.rm = TRUE),
+  Max    = max(dias_denuncia$days_difference, na.rm = TRUE)
+)
+
+kable(simple_stats, digits = 0)
+```
+
+# Avaliações
+
+Abaixo, mostramos o histograma (@fig-nota-hist) contendo notas das avaliações das aulas, e também suas principais estatísticas (@tbl-nota-estat):
+
+```{r Avaliacao1, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: fig-nota-hist
+#| tbl-cap: ""
+hist_notas <- ggplot(notas_avaliacao) + geom_histogram(aes(x = nota), binwidth = 0.25, fill = "dodgerblue2", color = "black", linewidth = 0.1) + theme_minimal() + labs(title = "Histograma das Notas das Avaliações", x = "Nota", y = "Frequência") + theme(plot.title = element_text(hjust = 0.5))
+hist_notas
+```
+
+```{r Avaliacao2, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-nota-estat
+#| tbl-cap: "Estatísticas das Notas de Avaliação"
+estat_notas_tabela <- tibble(
+  "Média" = estat_notas$avg,
+  "Min" = estat_notas$min,
+  "Mediana" = median(notas_avaliacao$nota),
+  "Max" = estat_notas$max
+)
+kable(estat_notas_tabela, digits = 2)
+```
+
+# Mensagens
+
+Abaixo, na @tbl-mensagem temos os 20 usuários que mais mandaram mensagens nos chats de agendamento:
+```{r Mensagens, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-mensagem
+#| tbl-cap: ""
+colnames(top_senders) = c("NUSP", "Mensagens")
+top_senders$Mensagens <- as.numeric(top_senders$Mensagens)
+left  <- top_senders %>% slice(1:10)
+right <- top_senders %>% slice(11:20)
+
+combined_top_senders <- cbind(left, right)
+colnames(combined_top_senders) <- c("NUSP", "Mensagens", "NUSP", "Mensagens")
+
+kable(combined_top_senders, booktabs = FALSE) %>%
+  kable_styling(latex_options = c("HOLD_position"))
+
+```
+
+# Assuntos
+
+As aulas da plataforma tem assuntos pré-definidos pelos alunos solicitantes. Há 5 categorias de assuntos que cobrem as dificuldades que os solicitantes podem ter. Como vemos a seguir na @fig-assuntos, a maior dificuldade dos alunos é o aprofundamento teórico:
+
+```{r Assuntos, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: fig-assuntos
+#| tbl-cap: ""
+assunto_aula$count <- as.numeric(assunto_aula$count)
+barras_assunto_aula <- ggplot(data = assunto_aula) + geom_bar(aes(x = assunto, y = count, fill = assunto), stat = "identity") + theme_minimal() + labs(title = "Gráfico de Barras: Aulas por Assunto", x = "Assunto", y = "Frequência") + theme(plot.title = element_text(hjust = 0.5)) + scale_x_discrete(labels = c('Aprofundamento teórico' = "Aprofundamento teórico", 'Conteúdo da aula' = "Conteúdo da aula", 'Discussão de caso' = "Discussão de caso", 'Resolução de problemas' = "Resolução de problemas", 'Prática de exercícios' = "Prática de exercícios")) + guides(x = guide_axis(n.dodge = 2)) + scale_fill_brewer(palette = "Set2") + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) + ylim(c(0, 15)) + guides(fill = guide_legend(title = NULL))
+barras_assunto_aula
+```
+\newpage
+# Aulas
+
+As aulas marcadas podem ter 3 duração diferentes, com preços diferentes. A ver, os alunos parecem não ter preferência entre as durações:
+```{r Aula, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-aulas
+#| tbl-cap: ""
+duracao_aula$duracao[duracao_aula$duracao == 1.0] <- "1h"
+duracao_aula$duracao[duracao_aula$duracao == 1.5] <- "1h30"
+duracao_aula$duracao[duracao_aula$duracao == 1.0] <- "2h"
+
+colnames(duracao_aula) = c("Duração", "Aulas")
+kable(duracao_aula)
+```
+
+# Agendamentos
+
+Vamos, a seguir (@fig-stat-agendamento), analisar os agendamentos de aulas da plataforma. Os agendamentos têm diferentes status: cancelado, quando há desistência de um agendamento pendente; pendente, quando o agendamento ainda não está pareado; confirmado, quando o agendamento está pareado; e conluído, quando a aula começa.
+
+```{r Agendamento1, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: fig-stat-agendamento
+#| tbl-cap: ""
+agendamento_status$status[agendamento_status$status == "cancelado"] <- "Cancelado"
+agendamento_status$status[agendamento_status$status == "pendente"] <- "Pendente"
+agendamento_status$status[agendamento_status$status == "concluido"] <- "Concluido"
+agendamento_status$status[agendamento_status$status == "confirmado"] <- "Confirmado"
+agendamento_status$status <- factor(agendamento_status$status, levels = c("Cancelado", "Pendente", "Confirmado", "Concluido"))
+
+
+barras_status_agendamento <- ggplot(data = agendamento_status) + geom_bar(aes(x = status, y = count, fill = status), stat = "identity") + theme_minimal() + labs(title = "Gráfico de Barras: Status por Agendamento", x = "Status", y = "Frequência") + theme(plot.title = element_text(hjust = 0.5)) + scale_x_discrete(labels = c('Cancelado' = "Cancelado", 'Pendente' = "Pendente", 'Concluido' = "Concluído", 'Confirmado' = "Confirmado")) + scale_fill_manual(values = c("Cancelado" = "#D73027", "Pendente" = "#FDC300", "Confirmado" = "steelblue3", "Concluido" = "#1A9850")) + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) + ylim(c(0, 45)) + guides(fill = guide_legend(title = NULL))
+barras_status_agendamento
+```
+
+
+
+Abaixo, temos uma tabela dupla (@tbl-agendamento-part) que mostra o _top_ 10 alunos e _top_ 10 tutores que mais participaram em agendamentos:
+```{r Agendamento2, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-agendamento-part
+#| tbl-cap: "Maiores Participantes em Agendamento: Alunos e Tutores"
+colnames(top_agendamentos_solicitante) = c("NUSP Aluno", "Agendamentos")
+colnames(top_agendamentos_tutor) = c("NUSP Tutor", "Agendamentos")
+kable(list(top_agendamentos_solicitante %>% slice(1:10), top_agendamentos_tutor %>% slice(1:10)))
+```
+\newpage
+Além disso, as aulas podem acontecer presencialmente ou remotamente, a gosto do solicitante. De novo, parece que os alunos não tem preferência entre os dois modos:
+
+```{r Agendamento3, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-modo-agendamento
+#| tbl-cap: ""
+colnames(modo_atendimento) = c("Modalidade", "Agendamentos")
+modo_atendimento$Modalidade[modo_atendimento$Modalidade == "online"] <- "Online"
+modo_atendimento$Modalidade[modo_atendimento$Modalidade == "presencial"] <- "Presencial"
+kable(modo_atendimento)
+```
+
+
+
+# Pacotes
+
+Os usuários, especialmente os estudantes, compram créditos por meio de pacotes. A seguir (@tbl-pacote), fazemos uma breve análise dos 10 usuários que mais gastaram (comprando créditos) da plataforma: 
+
+```{r Pacote, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-pacote
+#| tbl-cap: "Usuários e Dinheiro Gasto na Plataforma"
+colnames(dinheiro_gasto) = c("NUSP", "Total Gasto (R$)")
+kable(dinheiro_gasto %>% slice(1:10))
+```
+
+
+# Alunos
+
+A distribuição dos alunos da plataforma por curso e por instituto (@tbl-alunos-curso e @tbl-alunos-instituto):
+```{r Alunos1, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-alunos-curso
+#| tbl-cap: "Número de Alunos por Curso"
+colnames(alunos_curso) = c("Nome curso", "Alunos")
+left <- alunos_curso %>% slice(1:7)
+right <- alunos_curso %>% slice(8:14)
+
+combined_alunos_curso <- cbind(left, right)
+colnames(combined_alunos_curso) <- c("NUSP", "Mensagens", "NUSP", "Mensagens")
+
+kable(combined_alunos_curso, booktabs = FALSE) %>%
+  kable_styling(latex_options = c("HOLD_position"))
+```
+
+```{r Alunos2, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-alunos-instituto
+#| tbl-cap: "Número de Alunos por Instituto"
+
+colnames(alunos_instituto) <- c("Instituto", "Alunos")
+kable(alunos_instituto)
+```
+
+
+
+# Tutores
+
+Abaixo, na @tbl-tutores, listamos os 15 tutores com mais avaliações por seus solicitantes, mostrando também a avaliação obtida pelos tutores:
+```{r Tutores, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-tutores
+#| tbl-cap: "Avaliação dos 15 Melhores Tutores"
+
+colnames(nota_tutores) <- c("Nome", "Avaliacoes", "Nota")
+kable(nota_tutores %>% slice(1:15))
+
+```
+
+# Disciplinas
+
+Temos na @tbl-disciplina a seguir, as 15 disciplinas com mais aulas concluídas, para avaliarmos a procura por cada uma. Também temos o número de tutores disponíveis para cada uma e a nota média da disciplina:
+```{r Disciplinas, echo = FALSE, warning=FALSE, message=FALSE}
+#| label: tbl-disciplina
+#| tbl-cap: "Número de Tutores, de Aulas e a Avaliação por Disciplina"
+colnames(materias) <- c("Nome", "Tutores", "Aulas", "Avaliacao")
+kable(materias %>% slice(1:15))
+```
+
