@@ -1,10 +1,10 @@
 ---
 title: Análise de Dados do Sistema de Monitorias da USP
 author: 
-        - Caio Mendes de Almeida - 15444560
-        - Enzo dos Santos Aguiar - 13687283
-        - Franklin Eduardo Restrepo - 14995938
-        - Ian Barquette Loures - 15459667
+        - Caio Mendes de Almeida
+        - Enzo dos Santos Aguiar
+        - Franklin Eduardo Restrepo
+        - Ian Barquette Loures
 format:
   pdf:
     documentclass: article
@@ -353,4 +353,5 @@ Temos na @tbl-disciplina a seguir, as 15 disciplinas com mais aulas concluídas,
 colnames(materias) <- c("Nome", "Tutores", "Aulas", "Avaliacao")
 kable(materias %>% slice(1:15))
 ```
+
 
