@@ -182,7 +182,10 @@ mensagem → avaliacao → denuncia → aluno_aula
 ├── TRIGGERS.md                   # Documentação completa dos triggers
 ├── STORED_PROCEDURES.md          # Documentação completa das procedures
 ├── analise_dados.qmd             # Análise estatística (Quarto)
-└── analise_dados.pdf             # Análise estatística renderizada
+├── analise_dados.pdf             # Análise estatística renderizada
+├── Diagrama_EER.pdf              # Diagrama entidade-relacionamento estendido
+├── alteracoes_EER.txt            # Alterações do diagrama EER para melhorar o projeto
+└── diagrama_relacional.pdf       # Diagrama relacional
 ```
 
 ## Regras de Negócio
@@ -239,3 +242,10 @@ O projeto inclui:
 ## Projeto Acadêmico
 
 Desenvolvido para a disciplina MAC0313 - Introdução a Sistemas de Banco de Dados.
+
+## Contribuidores
+
+- Caio Mendes de Almeida 
+- Enzo dos Santos Aguiar
+- Franklin Eduardo Restrepo
+- Ian Barquette Loures
