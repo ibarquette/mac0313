@@ -237,7 +237,7 @@ O projeto inclui:
 - **Python 3.8+**: Scripts de população
   - pandas: Manipulação de dados CSV
   - sqlalchemy: Conexão com banco de dados
-- **Quarto**: Análise estatística e geração de relatórios
+- **R e Quarto**: Análise estatística e geração de relatórios
 
 ## Projeto Acadêmico
 
