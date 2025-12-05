@@ -1,0 +1,15 @@
+Alterações no diagrama EER:
+
+Adição do atributo “timestamp” no relacionamento entre Aluno e Pacote
+
+Mudança na cardinalidade do relacionamento de Agendamento com Chat, permitindo que um Agendamento possa ter vários Chats
+
+Substituição de IDs desnecessários por chaves compostas naturais
+
+O atributo “qtd_creditos” de Aluno deixa de ser derivado
+
+Remoção da entidade Currículo
+
+Observações:
+
+O atributo “versão” de Mensagem tem como objetivo manter o histórico de alterações.
